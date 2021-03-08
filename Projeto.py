@@ -7,10 +7,23 @@ dici = {}
 
 
 def inicial():
-    print("\n#####################ENTRADA DO LOG#######################")
-    print("Entre com o nome da tabela o qual está o Log\n")
+
+    def abrir():  # ABRIR TXT
+        global listas
+        dadosLog = open(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\{arqEntr}.txt", "r")
+        abrir = dadosLog.read()
+        listas = eval(abrir)
+        dadosLog.close()
+
+    def write():  # ESCREVER TXT
+        dadosLog = open(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\{arqEntr}.txt", "w+")
+        dadosLog.write(str(listas))
+        dadosLog.close()
+
     LoopEntr = True
     while LoopEntr:
+        print("\n#####################ENTRADA DO LOG#######################")
+        print("Entre com o nome da tabela o qual está o Log\n")
         try:
             entrada = input("Entrada: ")
         except:
@@ -23,38 +36,54 @@ def inicial():
         except:
             print("Você digitou algo que não podia, tente novamente!!!")
 
-        def abrir():
-            global listas
-            dadosLog = open(rf"C:\Users\Micro\Desktop\ProjetoPIBIC\{arqEntr}.txt", "r")
-            abrir = dadosLog.read()
-            listas = eval(abrir)
-            dadosLog.close()
-
-        def write():
-            dadosLog = open(rf"C:\Users\Micro\Desktop\ProjetoPIBIC\{arqEntr}.txt", "w+")
-            dadosLog.write(str(listas))
-            dadosLog.close()
-
-        if os.path.isfile(rf"C:\Users\Micro\Desktop\ProjetoPIBIC\{entrada}.xlsx"):
+        # Arquivo xlsx ou csv
+        if os.path.isfile(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\{entrada}.xlsx"):
             print("\nArquivo xlsx carregado com sucesso!!!")
+        elif os.path.isfile(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\{entrada}.csv"):
+            print("\nArquivo csv carregado com sucesso!!!")
         else:
-            print("\nO arquivo (xlsx) não foi localizado")
+            print("\nO arquivo (xlsx) ou (csv) não foi localizado")
             inicial()
             break
 
-        if os.path.isfile(rf"C:\Users\Micro\Desktop\ProjetoPIBIC\{arqEntr}.txt"):
+        # Arquivo txt Abrir ou criar
+        if os.path.isfile(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\{arqEntr}.txt"):
             print("\nArquivo txt carregado com sucesso!!!")
         else:
             print("\nO arquivo (txt) não foi localizado e foi criado um novo com esse nome!!!!!\n")
             write()
 
-        log = pd.read_excel(rf"C:\Users\Micro\Desktop\ProjetoPIBIC\{entrada}.xlsx", sheet_name="LogTeste", header=0)
+        # log carregar
+        try:
+            log = pd.read_excel(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\{entrada}.xlsx", header=0, sep=",")
+        except:
+            log = pd.read_csv(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\{entrada}.csv", header=0, sep=",")
 
-        log["StartTime"] = pd.to_datetime(log.StartTime)
+        if log.empty:
+            print("\nEste LOG está vazio!!! Tente Inserir outro LOG!!")
+            inicial()
+            break
 
-        log.sort_values(["ID", "StartTime"], inplace=True)  # ORDENANDO A HORA E O ID
+        log = log.rename(columns={'Case ID': 'CaseID'})
+        log = log.rename(columns={'Start Timestamp': 'StartTimestamp'})
+        log = log.rename(columns={'Qty Completed': 'QtyCompleted'})
 
+        log["Start Timestamp"] = pd.to_datetime(log.StartTimestamp)
+        log.sort_values(["CaseID", "StartTimestamp"], inplace=True)  # ORDENANDO A HORA E O ID
+
+        listaLog = log["Activity"].unique()
+        listaLog.sort()
+
+        incre = 0
+        for x in listaLog:
+            dici[x] = incre
+            incre += 1
+
+        log.loc[log.QtyCompleted == 0, 'QtyCompleted'] = 1
         LoopEntr = False
+
+    def get_days(time_delta):
+        return time_delta.days
 
     def get_seconds(time_delta):
         return time_delta.seconds
@@ -134,17 +163,30 @@ def inicial():
                 break
 
     def calcular():
-        inicio = log["ID"].min()
-        fim = log["ID"].max()
+        try:
+            log["CaseID"] = pd.to_numeric(log["CaseID"].str[5:])
+        except:
+            print("")
+
+        casos = log["CaseID"].unique()
+        inicio = log["CaseID"].min()
+        fim = log["CaseID"].max()
+
         LoopID = True
         while LoopID:
-            if inicio <= fim:
-                print("=========================================================================")
-                logFs = log[log.ID == inicio]
-                lista = logFs["Activity"].unique()
+            if inicio == fim:
+                break
+            elif inicio not in casos:
+                inicio += 1
+                continue
+            elif inicio <= fim:
 
-                timeA = pd.Timestamp(logFs["StartTime"].min())
-                timeB = pd.Timestamp(logFs["EndTime"].max())
+                logFs = log[log.CaseID == inicio]
+                lista = logFs["Activity"].unique()
+                listaP = logFs["Part Desc."].unique()
+
+                timeA = pd.Timestamp(logFs["StartTimestamp"].min())
+                timeB = pd.Timestamp(logFs["Complete Timestamp"].max())
                 timeF = timeB - timeA
 
                 timestampT = datetime.timestamp(timeA)
@@ -154,12 +196,17 @@ def inicial():
                 DataFrameDif = {"Diferença": []}
                 newDataFrame = pd.DataFrame(DataFrameDif)
 
-                newDataFrame["Diferença"] = (timeB - logFs["StartTime"])
+                newDataFrame["Diferença"] = (timeB - pd.to_datetime(logFs["StartTimestamp"]))
 
                 time_delta_series = newDataFrame["Diferença"]
 
-                converted_series = time_delta_series.apply(get_seconds)
-                converted_series = converted_series / 60
+                converted_seriesD = time_delta_series.apply(get_days)
+                converted_seriesD = converted_seriesD * 1440
+
+                converted_seriesS = time_delta_series.apply(get_seconds)
+                converted_seriesS = converted_seriesS / 60
+
+                converted_seriesF = converted_seriesD + converted_seriesS
 
                 print(logFs)
 
@@ -169,93 +216,162 @@ def inicial():
                 print("O tempo total de execução deste produto foi de: ", timeF)
                 print("Total:", timestampF / 60, "minutos")
 
-                result = converted_series / logFs["Product"]
+                result = converted_seriesF / logFs["QtyCompleted"]
 
-                Estado = ''
+                NumberEstado = ''
                 i = 0
-                for c in lista:
-                    Estado += c
-                    try:
-                        listas[f'{Estado}'].append(result.iloc[i])
-                    except KeyError:
-                        listas[f'{Estado}'] = []
-                        listas[f'{Estado}'].append(result.iloc[i])
 
-                    Estado += "-"
+                for p in listaP:
+                    Product = p
+                    if Product not in listas:
+                        listas[f'{Product}'] = {}
 
-                    write()
-                    i += 1
+                    for c in lista:
+                        NumberEstado += str(dici[c])
+                        try:
+                            listas[f'{Product}'][f'{NumberEstado}'].append(result.iloc[i])
+                        except KeyError:
+                            listas[f'{Product}'][f'{NumberEstado}'] = []
+                            listas[f'{Product}'][f'{NumberEstado}'].append(result.iloc[i])
+
+                        NumberEstado += "-"
+
+                        write()
+                        i += 1
 
             else:
                 break
-
             inicio += 1
+
         print("=========================================================================")
         print("                          FIM DA EXECUÇÃO!")
 
     def excel():
-        listaLog = log["Activity"].unique()
-        listaLog.sort()
+        abrir()
+        print(dici)
 
-        incre = 0
-        for x in listaLog:
-            dici[x] = incre
-            incre += 1
+        Looptxt = True
+        while Looptxt:
+            if len(listas) == 0:
+                print("\nO dicionário inserido está vazio!!"
+                      "Insira outro ou tente carregar os dados na opção '1' do Menu!!!")
+                try:
+                    escolher = int(
+                        input("\nInsire a opção 1 para inserir um novo arquivo, ou 2 para carregar os dados do Log: "))
+                    if escolher == 1:
+                        inicial()
+                        break
 
-        colunas = list(listaLog) + ['Estado', 'Ocorrido', 'Previsão', 'Resultado']
-        DataFrameTable = pd.DataFrame(columns=colunas)
+                    elif escolher == 2:
+                        calcular()
+                        break
 
-        inicio = log["ID"].min()
-        fim = log["ID"].max()
-        LoopID = True
-        while LoopID:
-            if inicio <= fim:
-                logFs = log[log.ID == inicio]
-                lista = logFs["Activity"].unique()
-                DataFrameDif = {"Diferença": []}
-                newDataFrame = pd.DataFrame(DataFrameDif)
-                timeB = pd.Timestamp(logFs["EndTime"].max())
-                newDataFrame["Diferença"] = (timeB - logFs["StartTime"])
-                time_delta_series = newDataFrame["Diferença"]
-                converted_series = time_delta_series.apply(get_seconds)
-                converted_series = converted_series / 60
-                listaPrevi = converted_series.unique()
-
-                Estado = ''
-                i = 0
-                for c in lista:
-                    Estado += c
-
-                    Previ2 = listas[f'{Estado}']
-                    Media = (sum(Previ2) / len(Previ2))
-                    result = ((listaPrevi[i] - Media) / listaPrevi[i])
-
-                    try:
-                        lAtividades = Estado.split("-")
-                    except KeyError:
-                        lAtividades = Estado.split(" ")
-
-                    l_output = [0 for y in range(0, len(dici))]
-                    for y in lAtividades:
-                        l_output[dici[y]] = l_output[dici[y]] + 1
-
-                    novalista = [l_output + [Estado, listaPrevi[i], Media, result]]
-
-                    Df2 = pd.DataFrame(novalista, columns=colunas)
-                    DataFrameTable = DataFrameTable.append(Df2, ignore_index=True)
-
-                    Estado += "-"
-                    i += 1
-
+                    else:
+                        print("Você digitou algo inválido!!!!!")
+                        break
+                except:
+                    print("Digite apenas números inteiros!!")
+                    Looptxt = True
             else:
-                break
-            inicio += 1
+                try:
+                    log["CaseID"] = pd.to_numeric(log["CaseID"].str[5:])
+                except:
+                    print("")
 
-        print("\nArquivo gerado com sucesso!")
-        writer = pd.ExcelWriter(rf"C:\Users\Micro\Desktop\ProjetoPIBIC\saida.xlsx")
-        DataFrameTable.to_excel(writer, sheet_name="Sheet1")
-        writer.save()
+                casos = log["CaseID"].unique()
+
+                colunas = list(listaLog) + ['Estado', 'Ocorrido', 'Previsão', 'Resultado']
+                DataFrameTable = pd.DataFrame(columns=colunas)
+
+                inicio = log["CaseID"].min()
+                fim = log["CaseID"].max()
+                LoopID = True
+                while LoopID:
+                    if inicio == fim:
+                        break
+                    elif inicio not in casos:
+                        inicio += 1
+                        continue
+                    elif inicio <= fim:
+
+                        logFs = log[log.CaseID == inicio]
+                        lista = logFs["Activity"].unique()
+                        listaP = logFs["Part Desc."].unique()
+
+                        timeB = pd.Timestamp(logFs["Complete Timestamp"].max())
+
+                        DataFrameDif = {"Diferença": []}
+                        newDataFrame = pd.DataFrame(DataFrameDif)
+
+                        newDataFrame["Diferença"] = (timeB - pd.to_datetime(logFs["StartTimestamp"]))
+
+                        time_delta_series = newDataFrame["Diferença"]
+
+                        converted_seriesD = time_delta_series.apply(get_days)
+                        converted_seriesD = converted_seriesD * 1440
+
+                        converted_seriesS = time_delta_series.apply(get_seconds)
+                        converted_seriesS = converted_seriesS / 60
+
+                        converted_seriesF = converted_seriesD + converted_seriesS
+
+                        listaPrevi = converted_seriesF.unique()
+
+                        Estado = ''
+                        NumberEstado = ''
+                        i = 0
+
+                        for p in listaP:
+                            Product = p
+                            for c in lista:
+                                Estado += c
+                                NumberEstado += str(dici[c])
+
+                                try:
+                                    MediaEx = sum(listas[f'{Product}'][f'{NumberEstado}']) / len(listas[f'{Product}'][f'{NumberEstado}'])
+                                except:
+                                    break
+
+
+                                try:
+                                    result = ((listaPrevi[i] - MediaEx) / listaPrevi[i])
+                                except:
+                                    result = 0
+
+                                try:
+                                    lAtividades = Estado.split("/")
+                                except KeyError:
+                                    lAtividades = Estado.split("  ")
+
+                                l_output = [0 for y in range(0, len(dici))]
+                                for y in lAtividades:
+                                    l_output[dici[y]] = l_output[dici[y]] + 1
+
+                                try:
+                                    novalista = [l_output + [NumberEstado, listaPrevi[i], MediaEx, result]]
+                                    print(novalista)
+                                except:
+                                    print("Erro")
+
+                                Df2 = pd.DataFrame(novalista, columns=colunas)
+                                DataFrameTable = DataFrameTable.append(Df2, ignore_index=True)
+
+                                Estado += "/"
+                                NumberEstado += '-'
+
+                                i += 1
+
+                    else:
+                        break
+                    inicio += 1
+
+                print("\nArquivo gerado com sucesso!")
+                writer = pd.ExcelWriter(rf"C:\Users\alex-\Desktop\ProjetoPIBIC\SaidaFinal.xlsx")
+                DataFrameTable.to_excel(writer, sheet_name="Sheet1")
+                writer.save()
+                Looptxt = False
 
     menu()
+
 
 inicial()
